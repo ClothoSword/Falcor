@@ -43,7 +43,7 @@ public:
     void End(RenderContext* pRenderContext);
 };
 
-enum class DistanceFieldGenerationType : int
+enum class DistanceFieldGenerationType : uint32_t
 {
     ManhattanGrassfire = 0,
     Chessboard,

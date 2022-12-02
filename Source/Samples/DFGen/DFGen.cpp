@@ -67,7 +67,7 @@ void DFGen::onLoad(RenderContext* pRenderContext)
     {
         mpDFGenPass[0] = FullScreenPass::create(kManhattanGrassfire);
         mpDFGenPass[1] = FullScreenPass::create(kChessboard);
-        //mpDFGenPass[2] = FullScreenPass::create(kErosion);
+        mpDFGenPass[2] = FullScreenPass::create(kErosion);
     }
 
     std::filesystem::path path;
@@ -90,19 +90,38 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
     uint SourceIndex = 0;
     uint TargetIndex = 1;
 
+    bool bErosionVertical = false;
+
     for (int i = 0; i < MaxExecNum; i++)
     {
         uint SourceIndex = i % 2;
         uint TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
 
         mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
+
+        if (GenType == 2)
+        {
+            mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
+            mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(1, 0) : int2(0, 1);
+            mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(-1, 0) : int2(0, -1);
+            mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
+        }
+
         OQPayload.Begin(pRenderContext);
         mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
         OQPayload.End(pRenderContext);
         pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
 
         if (!OQPayload.RasterizationCount)
+        {
+            if (GenType == 2 && !bErosionVertical)
+            {
+                bErosionVertical = true;
+                i = -1;
+                continue;
+            }
             break;
+        }
     }
 
     bGenDF = false;
