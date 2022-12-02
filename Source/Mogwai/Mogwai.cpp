@@ -85,6 +85,11 @@ namespace Mogwai
 
     void Renderer::onLoad(RenderContext* pRenderContext)
     {
+        const char kMarkerShaderFile[] = "Samples/Visualization2D/Visualization2d.ps.slang";
+        mpMainPass = FullScreenPass::create(kMarkerShaderFile);
+        spHeap = gpDevice->createQueryHeap(QueryHeap::Type::Occlusion, 1);
+        pTestDataBuffer = Buffer::create(sizeof(uint) * 2, Resource::BindFlags::None, Buffer::CpuAccess::Read, (void*)&Count);
+
         mpExtensions.push_back(MogwaiSettings::create(this));
         if (gExtensions)
         {
@@ -644,6 +649,9 @@ namespace Mogwai
         const float4 clearColor(0.38f, 0.52f, 0.10f, 1);
         pRenderContext->clearFbo(pTargetFbo.get(), clearColor, 1.0f, 0, FboAttachmentType::All);
 
+        pRenderContext->getLowLevelData()->getCommandList()->BeginQuery(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0);
+        
+
         if (mActiveGraph < mGraphs.size())
         {
             auto& pGraph = mGraphs[mActiveGraph].pGraph;
@@ -689,7 +697,15 @@ namespace Mogwai
             }
         }
 
+        mpMainPass->execute(pRenderContext, pTargetFbo);
+
+        pRenderContext->getLowLevelData()->getCommandList()->EndQuery(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0);   
+        pRenderContext->getLowLevelData()->getCommandList()->ResolveQueryData(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0, 1, pTestDataBuffer->getD3D12Handle(), 0);
+
         endFrame(pRenderContext, pTargetFbo);
+
+        //uint* pData = reinterpret_cast<uint*>(pTestDataBuffer->map(Buffer::MapType::Read));
+        //std::cout << *pData << std::endl;
     }
 
     bool Renderer::onMouseEvent(const MouseEvent& mouseEvent)

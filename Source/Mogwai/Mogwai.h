@@ -29,6 +29,7 @@
 #include "Falcor.h"
 #include "AppData.h"
 #include "RenderGraph/RenderGraph.h"
+#include "RenderGraph/BasePasses/FullScreenPass.h"
 
 namespace Falcor
 {
@@ -130,6 +131,11 @@ namespace Mogwai
         friend class Extension;
 
         Options mOptions;
+
+        std::weak_ptr<QueryHeap> spHeap;
+        Buffer::SharedPtr pTestDataBuffer;
+        uint Count = 0;
+        FullScreenPass::SharedPtr  mpMainPass;
 
         std::vector<Extension::UniquePtr> mpExtensions;
 

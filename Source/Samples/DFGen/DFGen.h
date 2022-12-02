@@ -1,0 +1,80 @@
+/***************************************************************************
+ # Copyright (c) 2015-21, NVIDIA CORPORATION. All rights reserved.
+ #
+ # Redistribution and use in source and binary forms, with or without
+ # modification, are permitted provided that the following conditions
+ # are met:
+ #  * Redistributions of source code must retain the above copyright
+ #    notice, this list of conditions and the following disclaimer.
+ #  * Redistributions in binary form must reproduce the above copyright
+ #    notice, this list of conditions and the following disclaimer in the
+ #    documentation and/or other materials provided with the distribution.
+ #  * Neither the name of NVIDIA CORPORATION nor the names of its
+ #    contributors may be used to endorse or promote products derived
+ #    from this software without specific prior written permission.
+ #
+ # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS "AS IS" AND ANY
+ # EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ # PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ # CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ # EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ # PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ # PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ # OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ **************************************************************************/
+#pragma once
+#include "Falcor.h"
+#include "RenderGraph/BasePasses/FullScreenPass.h"
+
+using namespace Falcor;
+
+struct OcclusionQueryPayLoad
+{
+public:
+    std::weak_ptr<QueryHeap> spHeap;
+    Buffer::SharedPtr pStagingBuffer;
+    uint RasterizationCount = 100000;
+
+    void Init();
+    void Begin(RenderContext* pRenderContext);
+    void End(RenderContext* pRenderContext);
+};
+
+enum class DistanceFieldGenerationType : int
+{
+    ManhattanGrassfire = 0,
+    Chessboard,
+    Erosion,
+    Num
+};
+
+class DFGen : public IRenderer
+{
+public:
+    void onLoad(RenderContext* pRenderContext) override;
+    void onFrameRender(RenderContext* pRenderContext, const Fbo::SharedPtr& pTargetFbo) override;
+    void onShutdown() override;
+    void onResizeSwapChain(uint32_t width, uint32_t height) override;
+    bool onKeyEvent(const KeyboardEvent& keyEvent) override;
+    bool onMouseEvent(const MouseEvent& mouseEvent) override;
+    void onHotReload(HotReloadFlags reloaded) override;
+    void onGuiRender(Gui* pGui) override;
+
+private:
+    void DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& pTargetFbo);
+
+private:
+    FullScreenPass::SharedPtr  mpPingPongPass;
+    FullScreenPass::SharedPtr  mpDFGenPass[3];
+    Texture::SharedPtr mpSource;
+    Fbo::SharedPtr mpPingPong[2];
+    uint ExecuteCount = 0;
+    OcclusionQueryPayLoad OQPayload;
+    uint MaxExecNum = 50;
+    uint CurrentPassCount = 0;
+    bool bGenDF = false;
+    uint32_t GenType = 0;
+};
