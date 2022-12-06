@@ -36,17 +36,22 @@ uint32_t mSampleGuiPositionY = 40;
 
 namespace
 {
-    const char kManhattanGrassfire[] = "Samples/DFGen/ManhattanGrassfire.ps.slang";
-    const char kChessboard[] = "Samples/DFGen/Chessboard.ps.slang";
-    const char kErosion[] = "Samples/DFGen/Erosion.ps.slang";
-    //const char kManhattanGrassfire[] = "E:/Projects/Falcor/Source/Samples/DFGen/ManhattanGrassfire.ps.slang";
+    //const char kManhattanGrassfire[] = "Samples/DFGen/ManhattanGrassfire.ps.slang";
+    //const char kChessboard[] = "Samples/DFGen/Chessboard.ps.slang";
+    //const char kErosion[] = "Samples/DFGen/Erosion.ps.slang";
+    //const char kErosionSDF[] = "Samples/DFGen/ErosionSDF.ps.slang";
+    const char kManhattanGrassfire[] = "E:/Projects/Falcor/Source/Samples/DFGen/ManhattanGrassfire.ps.slang";
+    const char kChessboard[] = "E:/Projects/Falcor/Source/Samples/DFGen/Chessboard.ps.slang";
+    const char kErosion[] = "E:/Projects/Falcor/Source/Samples/DFGen/Erosion.ps.slang";
+    const char kErosionSDF[] = "E:/Projects/Falcor/Source/Samples/DFGen/ErosionSDF.ps.slang";
 }
 
 const Gui::DropdownList kDistanceFieldGenerationTypeList =
 {
     { (uint32_t)DistanceFieldGenerationType::ManhattanGrassfire, "Manhattan Grassfire" },
     { (uint32_t)DistanceFieldGenerationType::Chessboard, "Chessboard" },
-    { (uint32_t)DistanceFieldGenerationType::Erosion, "Erosion" }
+    { (uint32_t)DistanceFieldGenerationType::Erosion, "Erosion" },
+    { (uint32_t)DistanceFieldGenerationType::ErosionSDF, "ErosionSDF" }
 };
 
 void DFGen::onGuiRender(Gui* pGui)
@@ -58,6 +63,7 @@ void DFGen::onGuiRender(Gui* pGui)
     {
         bGenDF = true;
     }
+    w.checkbox("Gen Debug", bGenDFDebug);
 }
 
 void DFGen::onLoad(RenderContext* pRenderContext)
@@ -68,14 +74,20 @@ void DFGen::onLoad(RenderContext* pRenderContext)
         mpDFGenPass[0] = FullScreenPass::create(kManhattanGrassfire);
         mpDFGenPass[1] = FullScreenPass::create(kChessboard);
         mpDFGenPass[2] = FullScreenPass::create(kErosion);
+        mpErosionSDF = FullScreenPass::create(kErosionSDF);
     }
 
     std::filesystem::path path;
     FileDialogFilterVec filters = { {"bmp"}, {"jpg"}, {"dds"}, {"png"}, {"tiff"}, {"tif"}, {"tga"} };
     if (openFileDialog(filters, path))
         mpSource = Texture::createFromFile(path, false, true);
+    if (openFileDialog(filters, path))
+        mpSourceInv = Texture::createFromFile(path, false, true);
 
     OQPayload.Init();
+
+    PositiveDF = Fbo::create2D(mpSource->getWidth(), mpSource->getHeight(), ResourceFormat::R8Unorm);
+    SDFRT = Fbo::create2D(mpSource->getWidth(), mpSource->getHeight(), ResourceFormat::R8Unorm);
 }
 
 void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& pTargetFbo)
@@ -85,7 +97,7 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
     pRenderContext->blit(mpSource->getSRV(), mpPingPong[0]->getRenderTargetView(0));
     pRenderContext->clearRtv(mpPingPong[1]->getRenderTargetView(0).get(), float4(0, 0, 0, 0));
 
-    mpPingPongPass = mpDFGenPass[GenType];
+    mpPingPongPass = mpDFGenPass[clamp(GenType, 0u, 2u)];
 
     uint SourceIndex = 0;
     uint TargetIndex = 1;
@@ -99,11 +111,11 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
 
         mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
 
-        if (GenType == 2)
+        if (GenType == 2 || GenType == 3)
         {
             mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
-            mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(1, 0) : int2(0, 1);
-            mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(-1, 0) : int2(0, -1);
+            mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
+            mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
             mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
         }
 
@@ -114,23 +126,69 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
 
         if (!OQPayload.RasterizationCount)
         {
-            if (GenType == 2 && !bErosionVertical)
+            if (GenType == 2 || GenType == 3)
             {
-                bErosionVertical = true;
-                i = -1;
-                continue;
+                if (!bErosionVertical)
+                {
+                    bErosionVertical = true;
+                    i = -1;
+                    continue;
+                }
             }
             break;
         }
     }
 
+    if (GenType == 3)
+    {
+        bErosionVertical = false;
+        pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), PositiveDF->getRenderTargetView(0));
+        pRenderContext->blit(mpSourceInv->getSRV(), mpPingPong[0]->getRenderTargetView(0));
+        pRenderContext->clearRtv(mpPingPong[1]->getRenderTargetView(0).get(), float4(0, 0, 0, 0));
+
+        for (int i = 0; i < MaxExecNum; i++)
+        {
+            uint SourceIndex = i % 2;
+            uint TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
+
+            mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
+            mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
+            mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
+            mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
+            mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
+
+            OQPayload.Begin(pRenderContext);
+            mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
+            OQPayload.End(pRenderContext);
+            pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
+
+            if (!OQPayload.RasterizationCount)
+            {
+                    if (!bErosionVertical)
+                    {
+                        bErosionVertical = true;
+                        i = -1;
+                        continue;
+                    }
+                break;
+            }
+        }
+
+        mpErosionSDF["gTexPos"] = PositiveDF->getColorTexture(0);
+        mpErosionSDF["gTexNeg"] = mpPingPong[TargetIndex]->getColorTexture(0);
+        mpErosionSDF->execute(pRenderContext, SDFRT);
+    }
+
     bGenDF = false;
-    pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
+    if(GenType == 3)
+        pRenderContext->blit(SDFRT->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
+    else
+        pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
 }
 
 void DFGen::onFrameRender(RenderContext* pRenderContext, const Fbo::SharedPtr& pTargetFbo)
 {
-    if (bGenDF)
+    if (bGenDF || bGenDFDebug)
         DFGenRenderer(pRenderContext, pTargetFbo);
 }
 

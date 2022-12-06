@@ -48,6 +48,7 @@ enum class DistanceFieldGenerationType : uint32_t
     ManhattanGrassfire = 0,
     Chessboard,
     Erosion,
+    ErosionSDF,
     Num
 };
 
@@ -69,12 +70,17 @@ private:
 private:
     FullScreenPass::SharedPtr  mpPingPongPass;
     FullScreenPass::SharedPtr  mpDFGenPass[3];
+    FullScreenPass::SharedPtr  mpErosionSDF;
     Texture::SharedPtr mpSource;
+    Texture::SharedPtr mpSourceInv;
     Fbo::SharedPtr mpPingPong[2];
+    Fbo::SharedPtr PositiveDF;
+    Fbo::SharedPtr SDFRT;
     uint ExecuteCount = 0;
     OcclusionQueryPayLoad OQPayload;
     uint MaxExecNum = 50;
     uint CurrentPassCount = 0;
     bool bGenDF = false;
+    bool bGenDFDebug = false;
     uint32_t GenType = 0;
 };
