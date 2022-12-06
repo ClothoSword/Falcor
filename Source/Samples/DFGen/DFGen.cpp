@@ -104,7 +104,7 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
 
     bool bErosionVertical = false;
 
-    for (int i = 0; i < MaxExecNum; i++)
+    for (int i = 1; i < MaxExecNum; i++)
     {
         uint SourceIndex = i % 2;
         uint TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
@@ -146,7 +146,7 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
         pRenderContext->blit(mpSourceInv->getSRV(), mpPingPong[0]->getRenderTargetView(0));
         pRenderContext->clearRtv(mpPingPong[1]->getRenderTargetView(0).get(), float4(0, 0, 0, 0));
 
-        for (int i = 0; i < MaxExecNum; i++)
+        for (int i = 1; i < MaxExecNum; i++)
         {
             uint SourceIndex = i % 2;
             uint TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
