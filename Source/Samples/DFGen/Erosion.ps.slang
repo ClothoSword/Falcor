@@ -28,5 +28,5 @@ float main(float2 texC : TEXCOORD) : SV_TARGET0
     if ( color == FragColor || FragColor > MaxDistance )
         discard;
 
-    return (float)FragColor / 255;
+    return (float)FragColor / 255.0;
 }

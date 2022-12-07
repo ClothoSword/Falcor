@@ -95,19 +95,20 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
     mpPingPong[0] = Fbo::create2D(mpSource->getWidth(), mpSource->getHeight(), ResourceFormat::R8Unorm);
     mpPingPong[1] = Fbo::create2D(mpSource->getWidth(), mpSource->getHeight(), ResourceFormat::R8Unorm);
     pRenderContext->blit(mpSource->getSRV(), mpPingPong[0]->getRenderTargetView(0));
-    pRenderContext->clearRtv(mpPingPong[1]->getRenderTargetView(0).get(), float4(0, 0, 0, 0));
+    pRenderContext->blit(mpSource->getSRV(), mpPingPong[1]->getRenderTargetView(0));
 
     mpPingPongPass = mpDFGenPass[clamp(GenType, 0u, 2u)];
 
-    uint SourceIndex = 0;
-    uint TargetIndex = 1;
+    int SourceIndex = 0;
+    int TargetIndex = 1;
 
     bool bErosionVertical = false;
 
+    FALCOR_PROFILE("Horizontal");
     for (int i = 1; i < MaxExecNum; i++)
     {
-        uint SourceIndex = i % 2;
-        uint TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
+        SourceIndex = (i - 1) % 2;
+        TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
 
         mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
 
@@ -122,6 +123,7 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
         OQPayload.Begin(pRenderContext);
         mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
         OQPayload.End(pRenderContext);
+
         pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
 
         if (!OQPayload.RasterizationCount)
@@ -130,8 +132,9 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
             {
                 if (!bErosionVertical)
                 {
+                    FALCOR_PROFILE("Vertical");
                     bErosionVertical = true;
-                    i = -1;
+                    i = 0;
                     continue;
                 }
             }
@@ -148,8 +151,8 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
 
         for (int i = 1; i < MaxExecNum; i++)
         {
-            uint SourceIndex = i % 2;
-            uint TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
+            SourceIndex = (i - 1) % 2;
+            TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
 
             mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
             mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
@@ -167,7 +170,7 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
                     if (!bErosionVertical)
                     {
                         bErosionVertical = true;
-                        i = -1;
+                        i = 0;
                         continue;
                     }
                 break;
@@ -240,6 +243,7 @@ void OcclusionQueryPayLoad::Begin(RenderContext* pRenderContext)
 void OcclusionQueryPayLoad::End(RenderContext* pRenderContext)
 {
     pRenderContext->getLowLevelData()->getCommandList()->EndQuery(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0);
+    pRenderContext->flush();
     pRenderContext->getLowLevelData()->getCommandList()->ResolveQueryData(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0, 1, pStagingBuffer->getD3D12Handle(), 0);
 
     uint* pData = reinterpret_cast<uint*>(pStagingBuffer->map(Buffer::MapType::Read));
