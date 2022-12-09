@@ -104,89 +104,137 @@ void DFGen::DFGenRenderer(RenderContext* pRenderContext, const Fbo::SharedPtr& p
 
     bool bErosionVertical = false;
 
-    FALCOR_PROFILE("Horizontal");
-    for (int i = 1; i < MaxExecNum; i++)
+    switch (GenType)
     {
-        SourceIndex = (i - 1) % 2;
-        TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
-
-        mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
-
-        if (GenType == 2 || GenType == 3)
+        case 0: //ManhattanGrassfire
+        case 1: //Chessboard
         {
-            mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
-            mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
-            mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
-            mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
-        }
-
-        OQPayload.Begin(pRenderContext);
-        mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
-        OQPayload.End(pRenderContext);
-
-        pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
-
-        if (!OQPayload.RasterizationCount)
-        {
-            if (GenType == 2 || GenType == 3)
+            for (int i = 1; i < MaxExecNum; i++)
             {
-                if (!bErosionVertical)
+                SourceIndex = (i - 1) % 2;
+                TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
+                mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
+
+                OQPayload.Begin(pRenderContext);
+                mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
+                OQPayload.End(pRenderContext);
+
+                pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
+
+                if (!OQPayload.RasterizationCount)
                 {
-                    FALCOR_PROFILE("Vertical");
-                    bErosionVertical = true;
-                    i = 0;
-                    continue;
+                    break;
                 }
             }
-            break;
+            pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
         }
-    }
-
-    if (GenType == 3)
-    {
-        bErosionVertical = false;
-        pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), PositiveDF->getRenderTargetView(0));
-        pRenderContext->blit(mpSourceInv->getSRV(), mpPingPong[0]->getRenderTargetView(0));
-        pRenderContext->clearRtv(mpPingPong[1]->getRenderTargetView(0).get(), float4(0, 0, 0, 0));
-
-        for (int i = 1; i < MaxExecNum; i++)
+        case 2: //ErosionDF
         {
-            SourceIndex = (i - 1) % 2;
-            TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
-
-            mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
-            mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
-            mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
-            mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
-            mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
-
-            OQPayload.Begin(pRenderContext);
-            mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
-            OQPayload.End(pRenderContext);
-            pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
-
-            if (!OQPayload.RasterizationCount)
+            for (int i = 1; i < MaxExecNum; i++)
             {
+                SourceIndex = (i - 1) % 2;
+                TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
+
+                mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
+                mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
+                mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
+                mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
+                mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
+
+                OQPayload.Begin(pRenderContext);
+                mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
+                OQPayload.End(pRenderContext);
+
+                pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
+
+                if (!OQPayload.RasterizationCount)
+                {
                     if (!bErosionVertical)
                     {
                         bErosionVertical = true;
                         i = 0;
                         continue;
                     }
-                break;
+                    break;
+                }
             }
+            pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
         }
+        case 3: //ErosionSDF
+        {
+            for (int i = 1; i < MaxExecNum; i++)
+            {
+                SourceIndex = (i - 1) % 2;
+                TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
 
-        mpErosionSDF["gTexPos"] = PositiveDF->getColorTexture(0);
-        mpErosionSDF["gTexNeg"] = mpPingPong[TargetIndex]->getColorTexture(0);
-        mpErosionSDF->execute(pRenderContext, SDFRT);
+                mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
+                mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
+                mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
+                mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
+                mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
+
+                OQPayload.Begin(pRenderContext);
+                mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
+                OQPayload.End(pRenderContext);
+
+                pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
+
+                if (!OQPayload.RasterizationCount)
+                {
+                    if (!bErosionVertical)
+                    {
+                        bErosionVertical = true;
+                        i = 0;
+                        continue;
+                    }
+                    break;
+                }
+            }
+
+            bErosionVertical = false;
+            pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), PositiveDF->getRenderTargetView(0));
+            pRenderContext->blit(mpSourceInv->getSRV(), mpPingPong[0]->getRenderTargetView(0));
+            pRenderContext->clearRtv(mpPingPong[1]->getRenderTargetView(0).get(), float4(0, 0, 0, 0));
+
+            for (int i = 1; i < MaxExecNum; i++)
+            {
+                SourceIndex = (i - 1) % 2;
+                TargetIndex = !!SourceIndex ? SourceIndex - 1 : SourceIndex + 1;
+
+                mpPingPongPass["gTex"] = mpPingPong[SourceIndex]->getColorTexture(0);
+                mpPingPongPass["ErosionPayload"]["Beta"] = 2 * i - 1;
+                mpPingPongPass["ErosionPayload"]["Offset0"] = bErosionVertical ? int2(0, 1) : int2(1, 0);
+                mpPingPongPass["ErosionPayload"]["Offset1"] = bErosionVertical ? int2(0, -1) : int2(-1, 0);
+                mpPingPongPass["ErosionPayload"]["MaxDistance"] = 255;
+
+                OQPayload.Begin(pRenderContext);
+                mpPingPongPass->execute(pRenderContext, mpPingPong[TargetIndex]);
+                OQPayload.End(pRenderContext);
+                pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), mpPingPong[SourceIndex]->getRenderTargetView(0));
+
+                if (!OQPayload.RasterizationCount)
+                {
+                    if (!bErosionVertical)
+                    {
+                        bErosionVertical = true;
+                        i = 0;
+                        continue;
+                    }
+                    break;
+                }
+            }
+
+            mpErosionSDF["gTexPos"] = PositiveDF->getColorTexture(0);
+            mpErosionSDF["gTexNeg"] = mpPingPong[TargetIndex]->getColorTexture(0);
+            mpErosionSDF->execute(pRenderContext, SDFRT);
+
+            pRenderContext->blit(SDFRT->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
+        }
+        default:
+            break;
     }
 
     bGenDF = false;
-    if(GenType == 3)
-        pRenderContext->blit(SDFRT->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
-    else
-        pRenderContext->blit(mpPingPong[TargetIndex]->getColorTexture(0)->getSRV(), pTargetFbo->getRenderTargetView(0));
 }
 
 void DFGen::onFrameRender(RenderContext* pRenderContext, const Fbo::SharedPtr& pTargetFbo)
@@ -243,8 +291,8 @@ void OcclusionQueryPayLoad::Begin(RenderContext* pRenderContext)
 void OcclusionQueryPayLoad::End(RenderContext* pRenderContext)
 {
     pRenderContext->getLowLevelData()->getCommandList()->EndQuery(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0);
-    pRenderContext->flush();
     pRenderContext->getLowLevelData()->getCommandList()->ResolveQueryData(spHeap.lock()->getApiHandle(), D3D12_QUERY_TYPE::D3D12_QUERY_TYPE_OCCLUSION, 0, 1, pStagingBuffer->getD3D12Handle(), 0);
+    pRenderContext->flush(true);
 
     uint* pData = reinterpret_cast<uint*>(pStagingBuffer->map(Buffer::MapType::Read));
     RasterizationCount = *pData;
